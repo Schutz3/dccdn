@@ -503,23 +503,14 @@ func (h *FileHandler) HandleMessageId(c *gin.Context) {
     cdnUrl, _ := h.Discord.RefreshDiscordUrl(message.Attachments[0].URL)
     proxyUrl, _ := h.Discord.RefreshDiscordUrl(message.Attachments[0].ProxyURL)
 
-    uploadResults := gin.H{
-        "cdn":      cdnUrl,
-        "proxy":    proxyUrl,
-        "custom":   fmt.Sprintf("https://%s/dl/%s", h.Config.Domain, message.ID),
-        "id":       message.ID,
-        "uploaded": time.Now().Format("File uploaded on January 2, 2006 PST"),
-        "mime":     message.Attachments[0].ContentType,
-    }
-
     c.HTML(http.StatusOK, "results.html", gin.H{
-        "url":        uploadResults["cdn"],
-        "proxyURL":   uploadResults["proxy"],
-        "customURL":  uploadResults["custom"],
-        "messageId":  uploadResults["id"],
-        "uploadDate": uploadResults["uploaded"],
-        "fileType":   uploadResults["mime"],
-        "customURL2": fmt.Sprintf("https://%s/v1/%s", h.Config.Domain, uploadResults["id"]),
+        "URL":        cdnUrl,
+        "ProxyURL":   proxyUrl,
+        "CustomURL":  fmt.Sprintf("https://%s/dl/%s", h.Config.Domain, message.ID),
+        "MessageID":  message.ID,
+        "UploadDate": time.Now().Format("File uploaded on January 2, 2006 PST"),
+        "FileType":   message.Attachments[0].ContentType,
+        "CustomURL2": fmt.Sprintf("https://%s/v1/%s", h.Config.Domain, message.ID),
     })
 }
 
