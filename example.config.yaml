@@ -15,4 +15,3 @@ rateLimit:
   requests: 10
   perSeconds: 30
   message: "Rate limit exceeded. Please try again later."
-version: "0.0.1"

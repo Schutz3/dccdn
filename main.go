@@ -56,7 +56,7 @@ type Config struct {
         PerSeconds int    `mapstructure:"perSeconds"`
         Message    string `mapstructure:"message"`
     } `mapstructure:"rateLimit"`
-    Version string `mapstructure:"version"`
+    Version string
 }
 
 type RateLimiter struct {
@@ -132,6 +132,7 @@ func loadConfig() Config {
     if err := viper.Unmarshal(&config); err != nil {
         log.Fatal("Config unmarshal error:", err)
     }
+    config.Version = "0.0.2"
     return config
 }
 
