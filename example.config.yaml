@@ -1,4 +1,4 @@
-port: 0000
+port: 8080
 host: ""
 domain: ""
 token: ""
