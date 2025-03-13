@@ -506,6 +506,7 @@ func (h *FileHandler) HandleMessageId(c *gin.Context) {
 
     cdnUrl, _ := h.Discord.RefreshDiscordUrl(message.Attachments[0].URL)
     proxyUrl, _ := h.Discord.RefreshDiscordUrl(message.Attachments[0].ProxyURL)
+    fname := message.Attachments[0].Filename
 
     c.HTML(http.StatusOK, "results.html", gin.H{
         "URL":        cdnUrl,
@@ -516,6 +517,7 @@ func (h *FileHandler) HandleMessageId(c *gin.Context) {
         "FileType":   message.Attachments[0].ContentType,
         "CustomURL2": fmt.Sprintf("https://%s/v1/%s", h.Config.Domain, message.ID),
         "FileName":   message.Attachments[0].Filename,
+        "CustomURL3": fmt.Sprintf("https://%s/%s/%s", h.Config.Domain, message.ID, fname),
     })
 }
 
