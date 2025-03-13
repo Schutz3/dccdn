@@ -414,6 +414,7 @@ func (a *App) SetupRoutes() {
     a.Router.GET("/results", handler.HandleResults)
     a.Router.GET("/sharex", handler.HandleShareX)
     a.Router.GET("/:messageId", handler.HandleMessageId)
+    a.Router.GET("/:messageId/:fname", handler.HandleMessageFname)
     a.Router.GET("/v1/:messageId", handler.HandleV1MessageId)
     a.Router.GET("/dl/:messageId", handler.HandleAttachments)
     a.Router.POST("/api/sharex", a.RateLimitMiddleware(), handler.HandleApiShareX)
@@ -477,6 +478,8 @@ func (h *FileHandler) HandleResults(c *gin.Context) {
         "UploadDate": results["uploaded"],
         "FileType":   results["mime"],
         "CustomURL2": fmt.Sprintf("https://%s/v1/%s", h.Config.Domain, results["id"]),
+        "CustomURL3": fmt.Sprintf("https://%s/%s/%s", h.Config.Domain, results["id"], results["fname"]),
+        "FileName":  results["fname"],
     })
 }
 
@@ -512,7 +515,58 @@ func (h *FileHandler) HandleMessageId(c *gin.Context) {
         "UploadDate": time.Now().Format("File uploaded on January 2, 2006 PST"),
         "FileType":   message.Attachments[0].ContentType,
         "CustomURL2": fmt.Sprintf("https://%s/v1/%s", h.Config.Domain, message.ID),
+        "FileName":   message.Attachments[0].Filename,
     })
+}
+
+func (h *FileHandler) HandleMessageFname(c *gin.Context) {
+    messageId := c.Param("messageId")
+    fname := c.Param("fname")
+
+    if _, err := strconv.ParseInt(messageId, 10, 64); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid message ID format"})
+        return
+    }
+
+    message, err := h.Discord.GetMessage(messageId)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+        return
+    }
+
+    if fname != "" && message.Attachments[0].Filename != fname {
+        c.JSON(http.StatusNotFound, gin.H{"error": "File name not found / not match"})
+        return
+    }
+
+    if len(message.Attachments) == 0 {
+        c.JSON(http.StatusNotFound, gin.H{"error": "No attachments in message"})
+        return
+    }
+
+    attachment := message.Attachments[0]
+    
+    cdnUrl, err := h.Discord.RefreshDiscordUrl(attachment.URL)
+    if err != nil {
+        log.Printf("CDN refresh failed: %v", err)
+        c.JSON(http.StatusFailedDependency, gin.H{"error": "Failed to refresh file URL"})
+        return
+    }
+
+    resp, err := http.Get(cdnUrl)
+    if err != nil {
+        c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to retrieve file"})
+        return
+    }
+    defer resp.Body.Close()
+
+    c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, attachment.Filename))
+    c.Header("Content-Type", resp.Header.Get("Content-Type"))
+    
+    _, err = io.Copy(c.Writer, resp.Body)
+    if err != nil {
+        log.Printf("Stream error: %v", err)
+    }
 }
 
 func (h *FileHandler) HandleV1MessageId(c *gin.Context) {
@@ -669,6 +723,7 @@ func (h *FileHandler) SetCookies(c *gin.Context, message *discordgo.Message) {
         "id":       message.ID,
         "uploaded": time.Now().Format("File uploaded on January 2, 2006 PST"),
         "mime":     message.Attachments[0].ContentType,
+        "fname": message.Attachments[0].Filename,
     }
 
     jsonData, _ := json.Marshal(cookieData)

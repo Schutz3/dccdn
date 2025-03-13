@@ -6,17 +6,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta property="og:type" content="website" />
-    <meta name="title" content="DCCDN" />
-    <meta name="description" content="Upload to Discord's CDN without needing their app." />
+    <meta name="title" content="Discord Custom CDN" />
+    <meta name="description" content="Auto refresh discord urls to prevent them from expiring, written in Go by scz. Compatible with ShareX. https://github.com/Schutz3/dccdn" />
     <meta name="robots" content="index, nofollow" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <meta name="language" content="English" />
-    <meta name="author" content="Spinfal" />
-    <meta property="og:image"
-        content="https://us-east-1.tixte.net/uploads/cdn.spin.rip/a74ef551-7e0e-4f99-9e2f-f5227466d44b.png" />
+    <meta name="author" content="Scz" />
+    <meta property="og:image" content="{{.URL}}" />
     <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:image"
-        content="https://us-east-1.tixte.net/uploads/cdn.spin.rip/a74ef551-7e0e-4f99-9e2f-f5227466d44b.png" />
+    <meta property="twitter:image" content="{{.URL}}" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <title>DCCDN</title>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css" rel="stylesheet" type="text/css" />
@@ -46,44 +44,60 @@
             <div class="w-full max-w-md">
                 <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
-                        <h1 class="card-title text-3xl font-bold text-center mb-2">File URLs</h1>
-                        <div class="text-sm mb-4">Message ID: <strong>{{.MessageID}}</strong></div>
+                        <h3 class="card-title text-3xl font-bold text-center mb-2">File Details</h3>
+                        <p class="text-sm">Message ID: <strong>{{.MessageID}}</strong></p>
+                        <p class="text-sm">File Name: <strong>{{.FileName}}</strong></p>
+                        <div class="preview" id="filePreview">
+                        </div>
                         <div class="space-y-4">
-                            <div>
-                                <p class="font-bold mb-1">CDN URL:</p>
+                            <div class="space-y-2">
+                                <p class="font-bold">CDN URL</p>
                                 <div class="join w-full">
                                     <input type="text" value="{{.URL}}" readonly
                                         class="input input-bordered join-item w-full">
-                                    <button onclick="copyToClipboard('{{.URL}}')" class="btn join-item">Copy</button>
+                                    <button onclick="copyToClipboard('{{.URL}}')" class="btn join-item">
+                                        Copy
+                                    </button>
+                                    <button onclick="href('{{.URL}}')" class="btn btn-primary join-item">
+                                        Go To
+                                    </button>
                                 </div>
                             </div>
-                            <div>
-                                <p class="font-bold mb-1">Proxy URL:</p>
+                            <div class="space-y-2">
+                                <p class="font-bold">Proxy URL</p>
                                 <div class="join w-full">
                                     <input type="text" value="{{.ProxyURL}}" readonly
                                         class="input input-bordered join-item w-full">
-                                    <button onclick="copyToClipboard('{{.ProxyURL}}')"
-                                        class="btn join-item">Copy</button>
+                                    <button onclick="copyToClipboard('{{.ProxyURL}}')" class="btn join-item">
+                                        Copy
+                                    </button>
+                                    <button onclick="href('{{.ProxyURL}}')" class="btn btn-primary join-item">
+                                        Go To
+                                    </button>
                                 </div>
                             </div>
-                            <div>
-                                <p class="font-bold mb-1">Custom URL Preview:</p>
+                            <div class="space-y-2">
+                                <p class="font-bold">Custom Url Preview</p>
                                 <div class="join w-full">
-                                    <input type="text" value="{{.CustomURL2}}" readonly
+                                    <input type="text" value="{{.CustomURL}}" readonly
                                         class="input input-bordered join-item w-full">
-                                    <button onclick="copyToClipboard('{{.CustomURL2}}')"
-                                        class="btn join-item">Copy</button>
+                                    <button onclick="copyToClipboard('{{.CustomURL2}}')" class="btn join-item">
+                                        Copy
+                                    </button>
+                                    <button onclick="href('{{.CustomURL2}}')" class="btn btn-primary join-item">
+                                        Go To
+                                    </button>
                                 </div>
                             </div>
                             <div class="space-y-2">
                                 <p class="font-bold">Direct Download</p>
                                 <div class="join w-full">
-                                    <input type="text" value="{{.CustomURL}}" readonly
+                                    <input type="text" value="{{.CustomURL3}}" readonly
                                         class="input input-bordered join-item w-full">
-                                    <button onclick="copyToClipboard('{{.CustomURL}}')" class="btn join-item">
+                                    <button onclick="copyToClipboard('{{.CustomURL3}}')" class="btn join-item">
                                         Copy
                                     </button>
-                                    <button onclick="href('{{.CustomURL}}')" class="btn btn-primary join-item">
+                                    <button onclick="href('{{.CustomURL3}}')" class="btn btn-primary join-item">
                                         Download
                                     </button>
                                 </div>
@@ -134,6 +148,34 @@
         function href(url) {
             window.location.href = url;
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const url = "{{.URL}}";
+            const fileName = "{{.FileName}}";
+            const fileExt = fileName.split('.').pop().toLowerCase();
+            const previewDiv = document.getElementById('filePreview');
+
+            const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            const videoExts = ['mp4', 'webm', 'mov', 'avi'];
+            const audioExts = ['mp3', 'wav', 'ogg'];
+
+            if (imageExts.includes(fileExt)) {
+                previewDiv.innerHTML = `<img src="${url}" alt="${fileName}" class="w-full h-auto">`;
+            } else if (videoExts.includes(fileExt)) {
+                previewDiv.innerHTML = `
+                                        <video controls class="w-full h-auto">
+                                            <source src="${url}" type="video/${fileExt}">
+                                            Your browser does not support the video tag.
+                                        </video>`;
+            } else if (audioExts.includes(fileExt)) {
+                previewDiv.innerHTML = `
+                                        <audio controls class="w-full">
+                                            <source src="${url}" type="audio/${fileExt}">
+                                            Your browser does not support the audio tag.
+                                        </audio>`;
+            }
+        });
+
     </script>
 </body>
 
