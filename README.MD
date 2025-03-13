@@ -1,13 +1,13 @@
-![DCCDN UPTIME & STATUS](https://cdn.scz.my.id/health)
+[DCCDN UPTIME & STATUS](https://cdn.scz.my.id/health)
 
 
 # DCCDN
 A simple website that allows you to upload files to Discord's CDN without having to do it in their app.
 
 ## Prerequisites
-Golang (to build from stratch)
-[Discord Bot](https://discord.com/developers/applications)
-[Git](https://git-scm.com/downloads)
+- Golang (to build from stratch)
+- [Discord Bot](https://discord.com/developers/applications)
+- [Git](https://git-scm.com/downloads)
 
 ## Installation
 ### Run this command:
@@ -19,7 +19,7 @@ or download the ZIP file and extract it
 cd dccdn
 ```
 ### Follow these steps:
-- Rename [examle.config.yaml](examle.config.yaml) to `config.yaml`
+- Rename [example.config.yaml](examle.config.yaml) to `config.yaml`
 - Go to https://discord.com/developers/applications and create bot
 - Make sure this is enabled
 ![Message Content Intent](https://cdn.scz.my.id/dl/1349628111032946751 "Message Content Intent")
@@ -35,7 +35,7 @@ go run main.go
 ```
 
 ## Usage
-The website will be up @ http://localhost:8080 (unless you've changed the config)
+The website will be up at http://localhost:8080 (unless you've changed the config)
 
 Files uploaded on the site will be available in the channel that you set in `config.yaml`
 
