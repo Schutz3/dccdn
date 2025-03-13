@@ -2,6 +2,7 @@ package main
 
 import (
     "bytes"
+    "context"
     "embed"
     "encoding/json"
     "fmt"
@@ -13,7 +14,11 @@ import (
     "strconv"
     "strings"
     "time"
-
+    "sync"
+    "os"
+    "os/signal"
+    "syscall"
+    "golang.org/x/time/rate"
     "github.com/bwmarrin/discordgo"
     "github.com/gin-contrib/static"
     "github.com/gin-gonic/gin"
@@ -25,23 +30,49 @@ var templateFS embed.FS
 //go:embed public
 var staticFS embed.FS
 
+var (
+    startTime   time.Time
+    restartChan chan bool
+)
+
 type Config struct {
-    Port        int    `mapstructure:"port"`
-    Host        string `mapstructure:"host"`
-    Domain      string `mapstructure:"domain"`
-    Token       string `mapstructure:"token"`
+    Port       int    `mapstructure:"port"`
+    Host       string `mapstructure:"host"`
+    Domain     string `mapstructure:"domain"`
+    Token      string `mapstructure:"token"`
     FileChannel string `mapstructure:"fileChannel"`
     MaxFileSize struct {
         Human string `mapstructure:"human"`
         Byte  int64  `mapstructure:"byte"`
     } `mapstructure:"maxFileSize"`
+    Analytics struct {
+        Enabled     bool   `mapstructure:"enabled"`
+        LogToDiscord bool   `mapstructure:"logToDiscord"`
+        ChannelID   string `mapstructure:"channelID"`
+    } `mapstructure:"analytics"`
+    RateLimit struct {
+        Enabled    bool   `mapstructure:"enabled"`
+        Requests   int    `mapstructure:"requests"`
+        PerSeconds int    `mapstructure:"perSeconds"`
+        Message    string `mapstructure:"message"`
+    } `mapstructure:"rateLimit"`
+    Version string `mapstructure:"version"`
+}
+
+type RateLimiter struct {
+    visitors map[string]*rate.Limiter
+    mtx      sync.Mutex
+    r        rate.Limit
+    b        int
 }
 
 type App struct {
     Config     Config
     Discord    *DiscordService
     FileServer *FileServer
+    RateLimiter *RateLimiter
     Router     *gin.Engine
+    Logger *log.Logger
 }
 
 type DiscordService struct {
@@ -72,12 +103,21 @@ func NewApp() *App {
     gin.SetMode(gin.ReleaseMode)
     router := gin.New()
     router.Use(gin.Recovery())
+    rateLimiter := NewRateLimiter(rate.Limit(config.RateLimit.Requests), config.RateLimit.PerSeconds)
+
+    logFile, err := os.OpenFile("dccdn.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0775)
+    if err != nil {
+        log.Fatal("Failed to open log file:", err)
+    }
+    logger := log.New(io.MultiWriter(os.Stdout, logFile), "", log.LstdFlags)
 
     return &App{
         Config:     config,
         Discord:    discord,
         FileServer: fileServer,
         Router:     router,
+        RateLimiter: rateLimiter,
+        Logger: logger,
     }
 }
 
@@ -107,7 +147,99 @@ func NewDiscordService(config *Config) *DiscordService {
 }
 
 func (d *DiscordService) Open() error {
+    d.Session.AddHandler(d.handleCommands)
+    d.Session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
+        log.Println("Bot is ready! Connected as", r.User.Username)
+        
+        commands := []*discordgo.ApplicationCommand{
+            {
+                Name:        "healthcheck",
+                Description: "Check the health status of the CDN service",
+            },
+            {
+                Name:        "restart",
+                Description: "Restart the CDN service",
+            },
+        }
+        
+        for _, cmd := range commands {
+            _, err := d.Session.ApplicationCommandCreate(d.Session.State.User.ID, "", cmd)
+            if err != nil {
+                log.Printf("Cannot create '%v' command: %v", cmd.Name, err)
+            }
+        }
+    })
+    
     return d.Session.Open()
+}
+
+func (d *DiscordService) handleCommands(s *discordgo.Session, i *discordgo.InteractionCreate) {
+    if i.Type != discordgo.InteractionApplicationCommand {
+        return
+    }
+    
+    switch i.ApplicationCommandData().Name {
+    case "healthcheck":
+        d.handleHealthCheck(s, i)
+    case "restart":
+        d.handleRestart(s, i)
+    }
+}
+
+func (d *DiscordService) handleHealthCheck(s *discordgo.Session, i *discordgo.InteractionCreate) {
+    uptime := time.Since(startTime).String()
+    
+    embed := &discordgo.MessageEmbed{
+        Title:       "Health Status",
+        Description: "Current status of the CDN service",
+        Color:       0x00ff00,
+        Fields: []*discordgo.MessageEmbedField{
+            {
+                Name:   "Status",
+                Value:  "Online",
+                Inline: true,
+            },
+            {
+                Name:   "Uptime",
+                Value:  uptime,
+                Inline: true,
+            },
+            {
+                Name:   "Discord Connection",
+                Value:  "Connected",
+                Inline: true,
+            },
+            {
+                Name:   "Version",
+                Value:  d.Config.Version,
+                Inline: true,
+            },
+        },
+        Timestamp: time.Now().Format(time.RFC3339),
+        Footer: &discordgo.MessageEmbedFooter{
+            Text: "DCCDN Health Check",
+        },
+    }
+    
+    s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+        Type: discordgo.InteractionResponseChannelMessageWithSource,
+        Data: &discordgo.InteractionResponseData{
+            Embeds: []*discordgo.MessageEmbed{embed},
+        },
+    })
+}
+
+func (d *DiscordService) handleRestart(s *discordgo.Session, i *discordgo.InteractionCreate) {
+    s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+        Type: discordgo.InteractionResponseChannelMessageWithSource,
+        Data: &discordgo.InteractionResponseData{
+            Content: "Restarting the CDN service...",
+        },
+    })
+    
+    if restartChan != nil {
+        restartChan <- true
+    }
 }
 
 func (d *DiscordService) Close() error {
@@ -148,6 +280,89 @@ func (d *DiscordService) RefreshDiscordUrl(originalLink string) (string, error) 
     json.NewDecoder(resp.Body).Decode(&result)
 
     return result["refreshed_urls"][0]["refreshed"], nil
+}
+
+func NewRateLimiter(r rate.Limit, b int) *RateLimiter {
+    return &RateLimiter{
+        visitors: make(map[string]*rate.Limiter),
+        r:        r,
+        b:        b,
+    }
+}
+
+func (rl *RateLimiter) GetLimiter(ip string) *rate.Limiter {
+    rl.mtx.Lock()
+    defer rl.mtx.Unlock()
+    
+    limiter, exists := rl.visitors[ip]
+    if !exists {
+        limiter = rate.NewLimiter(rl.r, rl.b)
+        rl.visitors[ip] = limiter
+    }
+    
+    return limiter
+}
+
+func (a *App) RateLimitMiddleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        ip := c.ClientIP()
+        limiter := a.RateLimiter.GetLimiter(ip)
+        if !limiter.Allow() {
+            c.JSON(http.StatusTooManyRequests, gin.H{
+                "error": a.Config.RateLimit.Message,
+            })
+            c.Abort()
+            return
+        }
+        c.Next()
+    }
+}
+
+func (a *App) AnalyticsMiddleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        start := time.Now()
+        path := c.Request.URL.Path
+        
+        c.Next()
+        
+        latency := time.Since(start)
+        clientIP := c.ClientIP()
+        method := c.Request.Method
+        statusCode := c.Writer.Status()
+        userAgent := c.Request.UserAgent()
+        
+        logMessage := fmt.Sprintf("[ANALYTICS] %s | %3d | %13v | %15s | %s | %s",
+            method, statusCode, latency, clientIP, path, userAgent)
+        
+        a.Logger.Println(logMessage)
+        
+        if a.Config.Analytics.Enabled && a.Config.Analytics.LogToDiscord && a.Config.Analytics.ChannelID != "" {
+            go func() {
+                embed := &discordgo.MessageEmbed{
+                    Title:       "CDN Analytics",
+                    Description: fmt.Sprintf("```%s```", logMessage),
+                    Color:       0x00ff00, 
+                    Timestamp:   time.Now().Format(time.RFC3339),
+                    Fields: []*discordgo.MessageEmbedField{
+                        {Name: "Method", Value: method, Inline: true},
+                        {Name: "Status", Value: strconv.Itoa(statusCode), Inline: true},
+                        {Name: "Latency", Value: latency.String(), Inline: true},
+                        {Name: "IP", Value: clientIP, Inline: true},
+                        {Name: "Path", Value: path, Inline: true},
+                        {Name: "User Agent", Value: userAgent, Inline: false},
+                    },
+                    Footer: &discordgo.MessageEmbedFooter{
+                        Text: "DCCDN Analytics",
+                    },
+                }
+                
+                _, err := a.Discord.Session.ChannelMessageSendEmbed(a.Config.Analytics.ChannelID, embed)
+                if err != nil {
+                    a.Logger.Printf("Failed to send analytics to channel: %v", err)
+                }
+            }()
+        }
+    }
 }
 
 func (e *FileServer) Open(name string) (http.File, error) {
@@ -193,13 +408,31 @@ func (a *App) SetupRoutes() {
     a.Router.SetHTMLTemplate(tmpl)
     handler := NewFileHandler(a.Discord, &a.Config)
 
+    a.Router.Use(a.AnalyticsMiddleware())
     a.Router.GET("/", handler.HandleIndex)
     a.Router.GET("/results", handler.HandleResults)
     a.Router.GET("/sharex", handler.HandleShareX)
     a.Router.GET("/:messageId", handler.HandleMessageId)
     a.Router.GET("/v1/:messageId", handler.HandleV1MessageId)
     a.Router.GET("/dl/:messageId", handler.HandleAttachments)
-    a.Router.POST("/api/sharex", handler.HandleApiShareX)
+    a.Router.POST("/api/sharex", a.RateLimitMiddleware(), handler.HandleApiShareX)
+
+
+    a.Router.GET("/health", func(c *gin.Context) {
+        var discordStatus string
+        if a.Discord.Session.State.User != nil {
+            discordStatus = "ok"
+        } else {
+            discordStatus = "error"
+        }
+        
+        c.JSON(http.StatusOK, gin.H{
+            "status":   "ok",
+            "uptime":   time.Since(startTime).String(),
+            "discord":  discordStatus,
+            "version":  a.Config.Version, 
+        })
+    })
 }
 
 func (a *App) Run() error {
@@ -472,10 +705,67 @@ func HumanizeBytes(bytes int64) string {
 }
 
 func main() {
-    app := NewApp()
-    app.SetupRoutes()
+    startTime = time.Now()
+    restartChan = make(chan bool, 1)
     
-    if err := app.Run(); err != nil {
-        log.Fatal("Server failed:", err)
+    for {
+        app := NewApp()
+        app.SetupRoutes()
+        
+        quit := make(chan os.Signal, 1)
+        signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+        
+        server := &http.Server{
+            Addr:    fmt.Sprintf("%s:%d", app.Config.Host, app.Config.Port),
+            Handler: app.Router,
+        }
+        
+        go func() {
+            app.Logger.Printf("Server running on %s:%d", app.Config.Host, app.Config.Port)
+            if err := app.Discord.Open(); err != nil {
+                app.Logger.Fatalf("Discord connection error: %v", err)
+            }
+            
+            if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+                app.Logger.Fatalf("Server failed: %v", err)
+            }
+        }()
+        
+        select {
+        case <-quit:
+            app.Logger.Println("Shutting down server...")
+            
+            ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+            defer cancel()
+            
+            if err := server.Shutdown(ctx); err != nil {
+                app.Logger.Fatalf("Server forced to shutdown: %v", err)
+            }
+            
+            if err := app.Discord.Close(); err != nil {
+                app.Logger.Printf("Error closing Discord connection: %v", err)
+            }
+            
+            app.Logger.Println("Server exited gracefully")
+            return
+            
+        case <-restartChan:
+            app.Logger.Println("Restarting server...")
+            
+            ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+            
+            if err := server.Shutdown(ctx); err != nil {
+                app.Logger.Printf("Server shutdown error during restart: %v", err)
+            }
+            
+            if err := app.Discord.Close(); err != nil {
+                app.Logger.Printf("Error closing Discord connection during restart: %v", err)
+            }
+            
+            cancel()
+            app.Logger.Println("Server restarted")
+            startTime = time.Now() 
+            continue
+        }
     }
 }
