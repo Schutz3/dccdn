@@ -6,6 +6,7 @@ A simple website that allows you to upload files to Discord's CDN without having
 
 ## Prerequisites
 - Golang (to build from stratch)
+- [Binary](https://github.com/Schutz3/dccdn/tags)
 - [Discord Bot](https://discord.com/developers/applications)
 - [Git](https://git-scm.com/downloads)
 
