@@ -1,0 +1,8 @@
+port: 0000
+host: ""
+domain: ""
+token: ""
+fileChannel: ""
+maxFileSize:
+  human: "100mb"
+  byte: 104857600

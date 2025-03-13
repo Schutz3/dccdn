@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta property="og:type" content="website" />
+    <meta name="title" content="DCCDN" />
+    <meta name="description" content="Upload to Discord's CDN without needing their app." />
+    <meta name="robots" content="index, follow" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="language" content="English" />
+    <meta name="author" content="Spinfal" />
+    <meta property="og:image" content="https://cdn.spin.rip/r/4EBFE1B7-D38B-421D-9289-EA85676DDF37.jpeg" />
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:image" content="https://cdn.spin.rip/r/4EBFE1B7-D38B-421D-9289-EA85676DDF37.jpeg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <title>DCCDN</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+
+<body>
+    <div class="container mx-auto">
+        <div class="flex flex-col items-center justify-center min-h-screen py-8">
+            <div class="w-full max-w-md">
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                        <h1 class="card-title text-3xl font-bold text-center">DCCDN</h1>
+                        <p class="text-center text-gray-600">Because Discord is our new CDN slave</p>
+                        <form id="upload-form" enctype="multipart/form-data" class="space-y-4 mt-4">
+                            <div class="form-control w-full">
+                                <label for="file" class="label cursor-pointer">
+                                    <span class="label-text" id="fileLabel">Choose a file</span>
+                                </label>
+                                <input type="file" name="file" id="file" class="file-input file-input-bordered w-full"
+                                    onchange="updateFileLabel(this)">
+                            </div>
+                            <p class="text-sm text-gray-600"><em>Maximum file size: {{.humanFileSize}}</em></p>
+                            <div class="divider">OR</div>
+                            <div class="form-control w-full">
+                                <input type="number" name="mid" id="mid" placeholder="Message ID"
+                                    class="input input-bordered w-full">
+                            </div>
+                            <button type="button" id="upload-btn" class="btn btn-primary w-full">Go</button>
+                            <p class="text-sm text-red-600 text-center">I can see everything you upload, don't be dumb
+                            </p>
+                            <progress id="progress-bar" class="progress w-full" value="0" max="100"></progress>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <footer class="card bg-base-100 shadow-xl w-full max-w-md mt-4">
+                <div class="card-body flex-row justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm">Dark Mode</span>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-5 h-5 hidden [data-theme=light]:block">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                            </svg>
+                            <input type="checkbox" id="theme-toggle" class="toggle toggle-ghost" />
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-5 h-5 hidden [data-theme=dark]:block">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                            </svg>
+                        </label>
+                    </div>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        const maxFileSize = {{.MaxFileSize}};
+        const humanFileSize = "{{.humanFileSize}}";
+        const phrases = ["Must be a big file...", "Discord will love this...", "Still going...", "meow...", "Petting the cats...", "Churning the gears...", "Just a moment longer...", "Is it tea time yet?", "Loading pixels...", "Waking up the hamsters...", "Cranking the handle...", "Setting up the stage...", "Baking cookies...", "Spinning the wheel...", "Reeling in the fish...", "Consulting the oracle..."];
+        const uploadBtn = document.getElementById("upload-btn");
+        const uploadForm = document.getElementById("upload-form");
+        const fileLabel = document.getElementById("fileLabel");
+    
+        function updateFileLabel(input) {
+            fileLabel.textContent = input.files[0] ? input.files[0].name : "Choose a file";
+        }
+    
+        function getRandomPhrase() {
+            return phrases[Math.floor(Math.random() * phrases.length)];
+        }
+    
+        uploadBtn.addEventListener("click", function () {
+            const fileInput = document.getElementById("file");
+            const midInput = document.getElementById("mid");
+            const file = fileInput?.files[0];
+            const mid = midInput?.value;
+            const progressBar = document.getElementById("progress-bar");
+    
+            if (!file && !mid) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Please select a file or enter a message ID.'
+                });
+                return;
+            }
+    
+            if (file && file.size >= maxFileSize) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'File too large',
+                    text: 'Your file is over ' + humanFileSize + '!'
+                });
+                return;
+            }
+    
+            uploadBtn.classList.remove("btn-primary");
+            uploadBtn.classList.add("btn-loading", "cursor-not-allowed");
+            uploadBtn.textContent = "Uploading...";
+            progressBar.value = 0;
+    
+            let formData = new FormData(uploadForm);
+            let xhr = new XMLHttpRequest();
+    
+            xhr.open('POST', '/api/sharex', true);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.withCredentials = true;
+    
+            xhr.upload.onprogress = function (e) {
+                if (e.lengthComputable) {
+                    let percent = (e.loaded / e.total) * 100;
+                    progressBar.value = percent;
+                }
+            };
+    
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    uploadBtn.classList.remove("btn-loading", "cursor-not-allowed");
+                    uploadBtn.classList.add("btn-success");
+                    uploadBtn.textContent = "Uploaded";
+                    progressBar.value = 100;
+                    window.location.href = '/results';
+                } else {
+                    let errorMessage = 'An error occurred during the upload';
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.message) {
+                            errorMessage = response.message;
+                        }
+                    } catch (e) {
+                        // If the response text cannot be parsed as JSON, fall back to the default error message
+                    }
+                    handleError(errorMessage);
+                }
+            };
+    
+            xhr.onerror = function () {
+                handleError('Network error occurred');
+            };
+    
+            function handleError(err) {
+                uploadBtn.classList.remove("btn-loading", "cursor-not-allowed");
+                uploadBtn.classList.add("btn-error");
+                uploadBtn.textContent = "Upload failed";
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Upload failed',
+                    text: err || 'An error occurred during the upload'
+                });
+                progressBar.value = 0;
+            }
+    
+            xhr.send(formData);
+        });
+    
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeToggle = document.getElementById('theme-toggle');
+            const html = document.documentElement;
+            const savedTheme = localStorage.getItem('theme') ||
+                (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            html.setAttribute('data-theme', savedTheme);
+            themeToggle.checked = savedTheme === 'dark';
+            themeToggle.addEventListener('change', () => {
+                const newTheme = themeToggle.checked ? 'dark' : 'light';
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+            });
+        });
+    </script>
+</body>
+
+</html>

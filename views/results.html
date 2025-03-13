@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta property="og:type" content="website" />
+    <meta name="title" content="DCCDN" />
+    <meta name="description" content="Upload to Discord's CDN without needing their app." />
+    <meta name="robots" content="index, nofollow" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="language" content="English" />
+    <meta name="author" content="Spinfal" />
+    <meta property="og:image"
+        content="https://us-east-1.tixte.net/uploads/cdn.spin.rip/a74ef551-7e0e-4f99-9e2f-f5227466d44b.png" />
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:image"
+        content="https://us-east-1.tixte.net/uploads/cdn.spin.rip/a74ef551-7e0e-4f99-9e2f-f5227466d44b.png" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <title>DCCDN</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                Swal.fire({
+                    title: 'Copied!',
+                    text: 'The URL has been copied to your clipboard.',
+                    icon: 'success',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000,
+                    timerProgressBar: true
+                });
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <div class="container mx-auto">
+        <div class="flex flex-col items-center justify-center min-h-screen py-8">
+            <div class="w-full max-w-md">
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                        <h1 class="card-title text-3xl font-bold text-center mb-2">File URLs</h1>
+                        <div class="text-sm mb-4">Message ID: <strong>{{.MessageID}}</strong></div>
+                        <div class="space-y-4">
+                            <div>
+                                <p class="font-bold mb-1">CDN URL:</p>
+                                <div class="join w-full">
+                                    <input type="text" value="{{.URL}}" readonly
+                                        class="input input-bordered join-item w-full">
+                                    <button onclick="copyToClipboard('{{.URL}}')" class="btn join-item">Copy</button>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="font-bold mb-1">Proxy URL:</p>
+                                <div class="join w-full">
+                                    <input type="text" value="{{.ProxyURL}}" readonly
+                                        class="input input-bordered join-item w-full">
+                                    <button onclick="copyToClipboard('{{.ProxyURL}}')"
+                                        class="btn join-item">Copy</button>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="font-bold mb-1">Custom URL Preview:</p>
+                                <div class="join w-full">
+                                    <input type="text" value="{{.CustomURL2}}" readonly
+                                        class="input input-bordered join-item w-full">
+                                    <button onclick="copyToClipboard('{{.CustomURL2}}')"
+                                        class="btn join-item">Copy</button>
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <p class="font-bold">Direct Download</p>
+                                <div class="join w-full">
+                                    <input type="text" value="{{.CustomURL}}" readonly
+                                        class="input input-bordered join-item w-full">
+                                    <button onclick="copyToClipboard('{{.CustomURL}}')" class="btn join-item">
+                                        Copy
+                                    </button>
+                                    <button onclick="href('{{.CustomURL}}')" class="btn btn-primary join-item">
+                                        Download
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <footer class="card bg-base-100 shadow-xl w-full max-w-md mt-4">
+                <div class="card-body flex-row justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-5 h-5 hidden [data-theme=light]:block">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                            </svg>
+                            <input type="checkbox" id="theme-toggle" class="toggle toggle-ghost" />
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-5 h-5 hidden [data-theme=dark]:block">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                            </svg>
+                        </label>
+                        <span class="text-sm">Dark Mode</span>
+                    </div>
+                    <span class="text-sm">{{.UploadDate}} <a href="https://mimeapplication.net/{{.FileType}}"
+                            target="_blank" rel="noreferrer" class="text-sm link link-hover">{{.FileType}}</a></span>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeToggle = document.getElementById('theme-toggle');
+            const html = document.documentElement;
+            const savedTheme = localStorage.getItem('theme') ||
+                (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            html.setAttribute('data-theme', savedTheme);
+            themeToggle.checked = savedTheme === 'dark';
+            themeToggle.addEventListener('change', () => {
+                const newTheme = themeToggle.checked ? 'dark' : 'light';
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+            });
+        });
+
+        function href(url) {
+            window.location.href = url;
+        }
+    </script>
+</body>
+
+</html>
