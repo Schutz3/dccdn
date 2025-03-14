@@ -18,11 +18,16 @@ import (
     "os"
     "os/signal"
     "syscall"
+    "runtime"
     "golang.org/x/time/rate"
     "github.com/bwmarrin/discordgo"
     "github.com/gin-contrib/static"
     "github.com/gin-gonic/gin"
     "github.com/spf13/viper"
+    "github.com/shirou/gopsutil/cpu"
+    "github.com/shirou/gopsutil/disk"
+    "github.com/shirou/gopsutil/mem"
+    "github.com/shirou/gopsutil/net"
 )
 
 //go:embed views/*.html
@@ -420,19 +425,54 @@ func (a *App) SetupRoutes() {
     a.Router.POST("/api/sharex", a.RateLimitMiddleware(), handler.HandleApiShareX)
 
 
-    a.Router.GET("/health", func(c *gin.Context) {
+    a.Router.GET("/health", a.RateLimitMiddleware(), func(c *gin.Context) {
         var discordStatus string
         if a.Discord.Session.State.User != nil {
             discordStatus = "ok"
         } else {
             discordStatus = "error"
         }
-        
+        var m runtime.MemStats
+        runtime.ReadMemStats(&m)
+        cpuUsage := getCPUUsage()
+        numCPU := runtime.NumCPU()
+        totalMem, freeMem := getMemoryInfo()
+        diskTotal, diskFree, diskUsed := getDiskInfo()
+        bytesIn, bytesOut := getNetworkStats()
+        rateLimit := a.Config.RateLimit
         c.JSON(http.StatusOK, gin.H{
-            "status":   "ok",
-            "uptime":   time.Since(startTime).String(),
-            "discord":  discordStatus,
-            "version":  a.Config.Version, 
+            "status":        "ok",
+            "uptime":        time.Since(startTime).String(),
+            "discord":       discordStatus,
+            "version":       a.Config.Version,
+            "go_version":    runtime.Version(),
+            "os":            runtime.GOOS,
+            "arch":          runtime.GOARCH,
+            "rate_limit":    rateLimit,
+            "sysinfo": gin.H{
+                "cpu": gin.H{
+                    "usage":     fmt.Sprintf("%.2f%%", cpuUsage),
+                    "cores":     numCPU,
+                },
+                "memory": gin.H{
+                    "total":     formatBytes(totalMem),
+                    "used":      formatBytes(totalMem - freeMem),
+                    "free":      formatBytes(freeMem),
+                    "go_alloc":  formatBytes(int64(m.Alloc)),
+                    "go_total":  formatBytes(int64(m.TotalAlloc)),
+                    "go_sys":    formatBytes(int64(m.Sys)),
+                },
+                "disk": gin.H{
+                    "total":     formatBytes(diskTotal),
+                    "used":      formatBytes(diskUsed),
+                    "free":      formatBytes(diskFree),
+                },
+                "network": gin.H{
+                    "in":  formatBytes(bytesIn),
+                    "out": formatBytes(bytesOut),
+                },
+            },
+            
         })
     })
 }
@@ -751,6 +791,65 @@ func HumanizeBytes(bytes int64) string {
         exp++
     }
     return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+func formatBytes(bytes int64) string {
+    const unit = 1024
+    if bytes < unit {
+        return fmt.Sprintf("%d B", bytes)
+    }
+    div, exp := int64(unit), 0
+    for n := bytes / unit; n >= unit; n /= unit {
+        div *= unit
+        exp++
+    }
+    return fmt.Sprintf("%.2f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// Get CPU usage percentage
+func getCPUUsage() float64 {
+    percentages, err := cpu.Percent(0, false)
+    if err != nil {
+        return 0.0
+    }
+    if len(percentages) > 0 {
+        return percentages[0]
+    }
+    return 0.0
+}
+
+// Get memory information
+func getMemoryInfo() (int64, int64) {
+    vmStat, err := mem.VirtualMemory()
+    if err != nil {
+        return 0, 0
+    }
+    return int64(vmStat.Total), int64(vmStat.Free)
+}
+
+// Get disk information
+func getDiskInfo() (int64, int64, int64) {
+    diskStat, err := disk.Usage("/")
+    if err != nil {
+        return 0, 0, 0
+    }
+    return int64(diskStat.Total), int64(diskStat.Free), int64(diskStat.Used)
+}
+
+// Get network statistics
+func getNetworkStats() (int64, int64) {
+    netStats, err := net.IOCounters(false)
+    if err != nil || len(netStats) == 0 {
+        return 0, 0
+    }
+    
+    var bytesRecv, bytesSent int64
+    for _, stat := range netStats {
+        bytesRecv += int64(stat.BytesRecv)
+        bytesSent += int64(stat.BytesSent)
+    }
+    
+    return bytesRecv, bytesSent
 }
 
 func main() {
