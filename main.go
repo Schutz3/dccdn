@@ -67,8 +67,7 @@ type Config struct {
 type RateLimiter struct {
     visitors map[string]*rate.Limiter
     mtx      sync.Mutex
-    r        rate.Limit
-    b        int
+    limiter  *rate.Limiter
 }
 
 type App struct {
@@ -108,7 +107,10 @@ func NewApp() *App {
     gin.SetMode(gin.ReleaseMode)
     router := gin.New()
     router.Use(gin.Recovery())
-    rateLimiter := NewRateLimiter(rate.Limit(config.RateLimit.Requests), config.RateLimit.PerSeconds)
+    rateLimiter := NewRateLimiter(
+        rate.Limit(float64(config.RateLimit.Requests)/float64(config.RateLimit.PerSeconds)), 
+        config.RateLimit.Requests,
+    )
 
     logFile, err := os.OpenFile("dccdn.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0775)
     if err != nil {
@@ -166,6 +168,14 @@ func (d *DiscordService) Open() error {
                 Name:        "restart",
                 Description: "Restart the CDN service",
             },
+            {
+                Name:        "about",
+                Description: "Show information about this bot",
+            },
+            {
+                Name:        "how",
+                Description: "Show usage instructions",
+            },
         }
         
         for _, cmd := range commands {
@@ -189,8 +199,62 @@ func (d *DiscordService) handleCommands(s *discordgo.Session, i *discordgo.Inter
         d.handleHealthCheck(s, i)
     case "restart":
         d.handleRestart(s, i)
+    case "about":
+        d.handleAbout(s, i)
+    case "how":
+        d.handleHow(s, i)
     }
 }
+
+func (d *DiscordService) handleAbout(s *discordgo.Session, i *discordgo.InteractionCreate) {
+    embed := &discordgo.MessageEmbed{
+        Title: "About DCCDN",
+        Color: 0x00ff00,
+        Fields: []*discordgo.MessageEmbedField{
+            {Name: "Version", Value: d.Config.Version, Inline: true},
+            {Name: "Author", Value: "Scz", Inline: true},
+            {Name: "GitHub", Value: "https://github.com/Schutz3/dccdn", Inline: false},
+        },
+        Description: "Discord Custom CDN - Auto-refresh Discord URLs to prevent expiration",
+        Footer: &discordgo.MessageEmbedFooter{
+            Text: "Juan Gantenk",
+        },
+    }
+
+    s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+        Type: discordgo.InteractionResponseChannelMessageWithSource,
+        Data: &discordgo.InteractionResponseData{
+            Embeds: []*discordgo.MessageEmbed{embed},
+        },
+    })
+}
+
+func (d *DiscordService) handleHow(s *discordgo.Session, i *discordgo.InteractionCreate) {
+    embed := &discordgo.MessageEmbed{
+        Title: "How to Use",
+        Color: 0x00ff00,
+        Description: "**Usage Instructions:**\n" +
+            "1. Upload files using the web interface or ShareX\n" +
+            "2. Use the generated URLs to access your files\n" +
+            "3. URLs automatically refresh when accessed\n\n" +
+            "**Features:**\n" +
+            "• Multiple URL formats\n" +
+            "• File previews\n" +
+            "• Discord integration\n" +
+            "• Rate limiting",
+        Footer: &discordgo.MessageEmbedFooter{
+            Text: "Juan Gantenk",
+        },
+    }
+
+    s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+        Type: discordgo.InteractionResponseChannelMessageWithSource,
+        Data: &discordgo.InteractionResponseData{
+            Embeds: []*discordgo.MessageEmbed{embed},
+        },
+    })
+}
+
 
 func (d *DiscordService) handleHealthCheck(s *discordgo.Session, i *discordgo.InteractionCreate) {
     uptime := time.Since(startTime).String()
@@ -252,6 +316,11 @@ func (d *DiscordService) Close() error {
     return d.Session.Close()
 }
 
+func (d *DiscordService) EditMessage(messageID, content string) error {
+    _, err := d.Session.ChannelMessageEdit(d.Config.FileChannel, messageID, content)
+    return err
+}
+
 func (d *DiscordService) GetMessage(messageId string) (*discordgo.Message, error) {
     return d.Session.ChannelMessage(d.Config.FileChannel, messageId)
 }
@@ -288,12 +357,15 @@ func (d *DiscordService) RefreshDiscordUrl(originalLink string) (string, error) 
     return result["refreshed_urls"][0]["refreshed"], nil
 }
 
-func NewRateLimiter(r rate.Limit, b int) *RateLimiter {
-    return &RateLimiter{
-        visitors: make(map[string]*rate.Limiter),
-        r:        r,
-        b:        b,
+func (rl *RateLimiter) Allow(ip string) bool {
+    rl.mtx.Lock()
+    limiter, exists := rl.visitors[ip]
+    if !exists {
+        limiter = rate.NewLimiter(rl.limiter.Limit(), rl.limiter.Burst())
+        rl.visitors[ip] = limiter
     }
+    rl.mtx.Unlock()
+    return limiter.Allow()
 }
 
 func (rl *RateLimiter) GetLimiter(ip string) *rate.Limiter {
@@ -311,14 +383,15 @@ func (rl *RateLimiter) GetLimiter(ip string) *rate.Limiter {
 
 func (a *App) RateLimitMiddleware() gin.HandlerFunc {
     return func(c *gin.Context) {
-        ip := c.ClientIP()
-        limiter := a.RateLimiter.GetLimiter(ip)
-        if !limiter.Allow() {
-            c.JSON(http.StatusTooManyRequests, gin.H{
-                "error": a.Config.RateLimit.Message,
-            })
-            c.Abort()
-            return
+        if a.Config.RateLimit.Enabled {
+            ip := c.ClientIP()
+            if !a.RateLimiter.Allow(ip) {
+                c.JSON(http.StatusTooManyRequests, gin.H{
+                    "error": a.Config.RateLimit.Message,
+                })
+                c.Abort()
+                return
+            }
         }
         c.Next()
     }
@@ -413,7 +486,7 @@ func (a *App) SetupRoutes() {
     tmpl := template.Must(template.ParseFS(templateFS, "views/*.html"))
     a.Router.SetHTMLTemplate(tmpl)
     handler := NewFileHandler(a.Discord, &a.Config)
-
+    a.Router.GET("/about", handler.HandleAbout)
     a.Router.Use(a.AnalyticsMiddleware())
     a.Router.GET("/", handler.HandleIndex)
     a.Router.GET("/results", handler.HandleResults)
@@ -494,6 +567,13 @@ func (h *FileHandler) HandleIndex(c *gin.Context) {
     c.HTML(http.StatusOK, "index.html", gin.H{
         "MaxFileSize":   maxFileSize,
         "humanFileSize": humanFileSize,
+    })
+}
+
+func (h *FileHandler) HandleAbout(c *gin.Context) {
+    c.HTML(http.StatusOK, "about.html", gin.H{
+        "Version":   h.Config.Version,
+        "GoVersion": runtime.Version(),
     })
 }
 
@@ -732,6 +812,15 @@ func (h *FileHandler) HandleApiShareX(c *gin.Context) {
         log.Printf("Error while sending file: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": true, "message": fmt.Sprintf("Error while processing file: %v", err)})
         return
+    }
+
+    content := fmt.Sprintf("``File details:`` https://%s/%s\n``Custom URL #1:`` https://%s/v1/%s\n``Custom URL #2:`` https://%s/dl/%s",
+        h.Config.Domain, msg.ID,
+        h.Config.Domain, msg.ID,
+        h.Config.Domain, msg.ID)
+
+    if err := h.Discord.EditMessage(msg.ID, content); err != nil {
+        log.Printf("Failed to edit message: %v", err)
     }
 
     h.SetCookies(c, msg)
