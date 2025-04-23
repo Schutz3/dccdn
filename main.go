@@ -67,9 +67,9 @@ type Config struct {
 type RateLimiter struct {
     visitors map[string]*rate.Limiter
     mtx      sync.Mutex
-    limiter  *rate.Limiter
+    r        rate.Limit
+    b        int
 }
-
 type App struct {
     Config     Config
     Discord    *DiscordService
@@ -100,6 +100,14 @@ type progressReader struct {
     read     int64
 }
 
+func NewRateLimiter(r rate.Limit, b int) *RateLimiter {
+    return &RateLimiter{
+        visitors: make(map[string]*rate.Limiter),
+        r:        r,
+        b:        b,
+    }
+}
+
 func NewApp() *App {
     config := loadConfig()
     discord := NewDiscordService(&config)
@@ -107,10 +115,7 @@ func NewApp() *App {
     gin.SetMode(gin.ReleaseMode)
     router := gin.New()
     router.Use(gin.Recovery())
-    rateLimiter := NewRateLimiter(
-        rate.Limit(float64(config.RateLimit.Requests)/float64(config.RateLimit.PerSeconds)), 
-        config.RateLimit.Requests,
-    )
+    rateLimiter := NewRateLimiter(rate.Limit(config.RateLimit.Requests), config.RateLimit.PerSeconds)
 
     logFile, err := os.OpenFile("dccdn.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0775)
     if err != nil {
@@ -361,7 +366,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
     rl.mtx.Lock()
     limiter, exists := rl.visitors[ip]
     if !exists {
-        limiter = rate.NewLimiter(rl.limiter.Limit(), rl.limiter.Burst())
+        limiter = rate.NewLimiter(rl.r, rl.b)
         rl.visitors[ip] = limiter
     }
     rl.mtx.Unlock()
@@ -667,7 +672,7 @@ func (h *FileHandler) HandleMessageFname(c *gin.Context) {
     }
 
     attachment := message.Attachments[0]
-    
+
     cdnUrl, err := h.Discord.RefreshDiscordUrl(attachment.URL)
     if err != nil {
         log.Printf("CDN refresh failed: %v", err)
@@ -682,9 +687,14 @@ func (h *FileHandler) HandleMessageFname(c *gin.Context) {
     }
     defer resp.Body.Close()
 
-    c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, attachment.Filename))
-    c.Header("Content-Type", resp.Header.Get("Content-Type"))
-    
+    contentType := resp.Header.Get("Content-Type")
+    if contentType == "application/pdf" {
+        c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, attachment.Filename))
+    } else {
+        c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, attachment.Filename))
+    }
+    c.Header("Content-Type", contentType)
+
     _, err = io.Copy(c.Writer, resp.Body)
     if err != nil {
         log.Printf("Stream error: %v", err)
@@ -814,10 +824,13 @@ func (h *FileHandler) HandleApiShareX(c *gin.Context) {
         return
     }
 
-    content := fmt.Sprintf("``File details:`` https://%s/%s\n``Custom URL #1:`` https://%s/v1/%s\n``Custom URL #2:`` https://%s/dl/%s",
+    fname := msg.Attachments[0].Filename
+
+    content := fmt.Sprintf("``File details:`` ``https://%s/%s``\n``Custom URL #1:`` ```https://%s/v1/%s``` ``Custom URL #2:`` ```https://%s/dl/%s``` ``Custom URL #3:`` ```https://%s/%s/%s```",
         h.Config.Domain, msg.ID,
         h.Config.Domain, msg.ID,
-        h.Config.Domain, msg.ID)
+        h.Config.Domain, msg.ID,
+        h.Config.Domain, msg.ID, fname)
 
     if err := h.Discord.EditMessage(msg.ID, content); err != nil {
         log.Printf("Failed to edit message: %v", err)

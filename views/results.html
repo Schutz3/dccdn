@@ -77,7 +77,7 @@
                                 </div>
                             </div>
                             <div class="space-y-2">
-                                <p class="font-bold">Custom Url Preview</p>
+                                <p class="font-bold">Custom Url Preview (/v1 path)</p>
                                 <div class="join w-full">
                                     <input type="text" value="{{.CustomURL}}" readonly
                                         class="input input-bordered join-item w-full">
@@ -90,7 +90,7 @@
                                 </div>
                             </div>
                             <div class="space-y-2">
-                                <p class="font-bold">Direct Download</p>
+                                <p class="font-bold">Direct Download #1 (Include File Name)</p>
                                 <div class="join w-full">
                                     <input type="text" value="{{.CustomURL3}}" readonly
                                         class="input input-bordered join-item w-full">
@@ -98,6 +98,19 @@
                                         Copy
                                     </button>
                                     <button onclick="href('{{.CustomURL3}}')" class="btn btn-primary join-item">
+                                        Download
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <p class="font-bold">Direct Download #2 (/dl path)</p>
+                                <div class="join w-full">
+                                    <input type="text" value="{{.CustomURL}}" readonly
+                                        class="input input-bordered join-item w-full">
+                                    <button onclick="copyToClipboard('{{.CustomURL}}')" class="btn join-item">
+                                        Copy
+                                    </button>
+                                    <button onclick="href('{{.CustomURL}}')" class="btn btn-primary join-item">
                                         Download
                                     </button>
                                 </div>
