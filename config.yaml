@@ -1,0 +1,16 @@
+port: 5321
+host: "0.0.0.0"
+domain: "cdn.scz.my.id"
+fileChannel: "1343486690093699072"
+maxFileSize:
+  human: "10mb"
+  byte: 10485760
+analytics:
+  enabled: true
+  logToDiscord: true
+  channelID: "1347356427982868520"  
+rateLimit:
+  enabled: false
+  requests: 10
+  perSeconds: 30
+  message: "Rate limit exceeded. Please try again later."

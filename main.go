@@ -28,6 +28,7 @@ import (
     "github.com/shirou/gopsutil/disk"
     "github.com/shirou/gopsutil/mem"
     "github.com/shirou/gopsutil/net"
+    "github.com/joho/godotenv"
 )
 
 //go:embed views/*.html
@@ -44,7 +45,6 @@ type Config struct {
     Port       int    `mapstructure:"port"`
     Host       string `mapstructure:"host"`
     Domain     string `mapstructure:"domain"`
-    Token      string `mapstructure:"token"`
     FileChannel string `mapstructure:"fileChannel"`
     MaxFileSize struct {
         Human string `mapstructure:"human"`
@@ -135,6 +135,15 @@ func NewApp() *App {
 
 func loadConfig() Config {
     var config Config
+    if err := godotenv.Load(); err != nil {
+        log.Println("Warning: No .env file found")
+    }
+
+    token := os.Getenv("TOKEN")
+    if token == "" {
+        log.Fatal("TOKEN environment variable is required")
+    }
+
     viper.SetConfigName("config")
     viper.SetConfigType("yaml")
     viper.AddConfigPath(".")
@@ -144,6 +153,8 @@ func loadConfig() Config {
     if err := viper.Unmarshal(&config); err != nil {
         log.Fatal("Config unmarshal error:", err)
     }
+
+    config.Token = token // Set the token from the environment variable
     config.Version = "0.0.2"
     return config
 }
