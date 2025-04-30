@@ -61,6 +61,7 @@ type Config struct {
         PerSeconds int    `mapstructure:"perSeconds"`
         Message    string `mapstructure:"message"`
     } `mapstructure:"rateLimit"`
+    Token string
     Version string
 }
 
@@ -135,6 +136,7 @@ func NewApp() *App {
 
 func loadConfig() Config {
     var config Config
+
     if err := godotenv.Load(); err != nil {
         log.Println("Warning: No .env file found")
     }
@@ -154,8 +156,8 @@ func loadConfig() Config {
         log.Fatal("Config unmarshal error:", err)
     }
 
-    config.Token = token // Set the token from the environment variable
-    config.Version = "0.0.2"
+    config.Token = token 
+    config.Version = "0.0.5"
     return config
 }
 
