@@ -42,7 +42,6 @@ var (
 )
 
 type Config struct {
-    Port       int    `mapstructure:"port"`
     Host       string `mapstructure:"host"`
     Domain     string `mapstructure:"domain"`
     FileChannel string `mapstructure:"fileChannel"`
@@ -63,6 +62,7 @@ type Config struct {
     } `mapstructure:"rateLimit"`
     Token string
     Version string
+    Port int
 }
 
 type RateLimiter struct {
@@ -146,18 +146,30 @@ func loadConfig() Config {
         log.Fatal("TOKEN environment variable is required")
     }
 
+    portStr := os.Getenv("PORT")
+    if portStr == "" {
+        portStr = "10000"
+    }
+
+    port, err := strconv.Atoi(portStr)
+    if err != nil {
+        log.Fatalf("Invalid port: %v", err)
+    }
+
     viper.SetConfigName("config")
     viper.SetConfigType("yaml")
     viper.AddConfigPath(".")
     if err := viper.ReadInConfig(); err != nil {
-        log.Fatal("Config error:", err)
+        log.Fatalf("Config error: %v", err)
     }
     if err := viper.Unmarshal(&config); err != nil {
-        log.Fatal("Config unmarshal error:", err)
+        log.Fatalf("Config unmarshal error: %v", err)
     }
 
-    config.Token = token 
+    config.Token = token
+    config.Port = port
     config.Version = "0.0.5"
+
     return config
 }
 
