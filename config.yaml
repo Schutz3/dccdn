@@ -1,4 +1,4 @@
-port: 80
+port: 10000
 host: "0.0.0.0"
 domain: "cdn.scz.my.id"
 fileChannel: "1343486690093699072"
