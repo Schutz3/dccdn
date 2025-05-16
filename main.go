@@ -51,7 +51,6 @@ type Config struct {
     Analytics struct {
         Enabled     bool   `mapstructure:"enabled"`
         LogToDiscord bool   `mapstructure:"logToDiscord"`
-        ChannelID   string
     } `mapstructure:"analytics"`
     RateLimit struct {
         Enabled    bool   `mapstructure:"enabled"`
@@ -59,6 +58,7 @@ type Config struct {
         PerSeconds int    `mapstructure:"perSeconds"`
         Message    string `mapstructure:"message"`
     } `mapstructure:"rateLimit"`
+    ChannelID   string
     Token string
     Domain string
     Version string
@@ -463,7 +463,7 @@ func (a *App) AnalyticsMiddleware() gin.HandlerFunc {
         
         a.Logger.Println(logMessage)
         
-        if a.Config.Analytics.Enabled && a.Config.Analytics.LogToDiscord && a.Config.Analytics.ChannelID != "" {
+        if a.Config.Analytics.Enabled && a.Config.Analytics.LogToDiscord && a.Config.ChannelID != "" {
             go func() {
                 embed := &discordgo.MessageEmbed{
                     Title:       "CDN Analytics",
