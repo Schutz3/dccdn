@@ -483,7 +483,7 @@ func (a *App) AnalyticsMiddleware() gin.HandlerFunc {
                     },
                 }
                 
-                _, err := a.Discord.Session.ChannelMessageSendEmbed(a.Config.Analytics.ChannelID, embed)
+                _, err := a.Discord.Session.ChannelMessageSendEmbed(a.Config.ChannelID, embed)
                 if err != nil {
                     a.Logger.Printf("Failed to send analytics to channel: %v", err)
                 }
