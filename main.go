@@ -43,8 +43,7 @@ var (
 
 type Config struct {
     Host       string `mapstructure:"host"`
-    Domain     string `mapstructure:"domain"`
-    FileChannel string `mapstructure:"fileChannel"`
+    FileChannel string
     MaxFileSize struct {
         Human string `mapstructure:"human"`
         Byte  int64  `mapstructure:"byte"`
@@ -52,7 +51,7 @@ type Config struct {
     Analytics struct {
         Enabled     bool   `mapstructure:"enabled"`
         LogToDiscord bool   `mapstructure:"logToDiscord"`
-        ChannelID   string `mapstructure:"channelID"`
+        ChannelID   string
     } `mapstructure:"analytics"`
     RateLimit struct {
         Enabled    bool   `mapstructure:"enabled"`
@@ -61,6 +60,7 @@ type Config struct {
         Message    string `mapstructure:"message"`
     } `mapstructure:"rateLimit"`
     Token string
+    Domain string
     Version string
     Port int
 }
@@ -146,6 +146,21 @@ func loadConfig() Config {
         log.Fatal("TOKEN environment variable is required")
     }
 
+    domain := os.Getenv("DOMAIN")
+    if domain == "" {
+        log.Fatal("DOMAIN environment variable is required")
+    }
+
+    filec := os.Getenv("FILEC")
+    if filec == "" {
+        log.Fatal("FILE CHANNEL environment variable is required")
+    }
+
+    cid := os.Getenv("CID")
+    if cid == "" {
+        log.Fatal("CID environment variable is required")
+    }
+
     portStr := os.Getenv("PORT")
     if portStr == "" {
         portStr = "10000"
@@ -168,6 +183,9 @@ func loadConfig() Config {
 
     config.Token = token
     config.Port = port
+    config.Domain = domain
+    config.FileChannel = filec
+    config.ChannelID = cid
     config.Version = "0.0.5"
 
     return config
