@@ -1,4 +1,4 @@
-[DCCDN UPTIME & STATUS](https://cdn.scz.my.id/health)
+[DCCDN UPTIME & STATUS](https://uptime.scz.my.id/)
 
 
 # DCCDN
